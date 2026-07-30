@@ -319,7 +319,7 @@ let selectedDate = fmtDate(today);
 let dateIndex = new Set(); // dates that have any entry (derived from APP_DATA)
 let APP_DATA = { days: {} };
 const JSONBLOB_BASE = 'https://jsonblob.com/api/jsonBlob';
-let BLOB_ID = ''; // 최초 실행 시 자동 생성됨. 값을 고정하면 모두가 같은 데이터를 공유합니다.
+let BLOB_ID = '019fb40b-2f34-7b73-9ceb-24550fc5487b'; // 모든 방문자가 공유하는 저장소 ID (고정됨)
 let dotCache = {}; // dateStr -> {meal:bool, poop:bool}  (lightweight, loaded lazily per month)
 
 const MEAL_LABELS = ['아침','점심','저녁','간식'];
