@@ -484,20 +484,41 @@ async function loadDay(dateStr){
 
 async function saveDay(dateStr, data){
   const has = (data.meals && data.meals.length) || (data.poops && data.poops.length) || (data.activities && data.activities.length) || (data.care && data.care.length) || (data.meds && data.meds.length) || (data.weights && data.weights.length);
-  if(has){ APP_DATA.days[dateStr] = data; dateIndex.add(dateStr); }
-  else { delete APP_DATA.days[dateStr]; dateIndex.delete(dateStr); }
-  dotCache[dateStr] = {
-    meal: !!(data.meals && data.meals.length),
-    poop: !!(data.poops && data.poops.length),
-    activity: !!(data.activities && data.activities.length),
-    care: !!(data.care && data.care.length),
-    med: !!(data.meds && data.meds.length),
-    weight: !!(data.weights && data.weights.length)
-  };
+
+  // 저장 직전, 서버의 최신 상태를 먼저 다시 받아와서 그 위에 내 변경사항만 얹는다.
+  // (다른 사람이 그 사이 추가한 기록을 덮어쓰지 않기 위함)
+  let fresh = APP_DATA;
+  try{
+    const res = await fetch(`${JSONBLOB_BASE}/${BLOB_ID}`);
+    if(res.ok){
+      fresh = await res.json();
+      if(!fresh.days) fresh.days = {};
+    }
+  }catch(e){ console.error('refresh before save failed', e); }
+
+  if(has){ fresh.days[dateStr] = data; }
+  else { delete fresh.days[dateStr]; }
+  APP_DATA = fresh;
+
+  // 전체 날짜 인덱스/달력 점 표시를 최신 상태로 재계산
+  dateIndex = new Set(Object.keys(APP_DATA.days));
+  for(const dStr of dateIndex){
+    const d = APP_DATA.days[dStr];
+    dotCache[dStr] = {
+      meal: !!(d.meals && d.meals.length),
+      poop: !!(d.poops && d.poops.length),
+      activity: !!(d.activities && d.activities.length),
+      care: !!(d.care && d.care.length),
+      med: !!(d.meds && d.meds.length),
+      weight: !!(d.weights && d.weights.length)
+    };
+  }
+
   const ok = await persistAppData();
   if(ok){
     showToast();
     renderReminderCard();
+    updateCalendarDots();
   } else {
     showToast('저장 실패! 인터넷 연결을 확인해주세요.', true);
   }
@@ -1585,21 +1606,32 @@ function runAsk(){
   box.className = result.ok ? 'show' : 'show error';
 }
 
+function syncDotCacheFromAppData(){
+  dateIndex = new Set(Object.keys(APP_DATA.days));
+  for(const dStr of dateIndex){
+    const d = APP_DATA.days[dStr];
+    dotCache[dStr] = {
+      meal: !!(d.meals && d.meals.length),
+      poop: !!(d.poops && d.poops.length),
+      activity: !!(d.activities && d.activities.length),
+      care: !!(d.care && d.care.length),
+      med: !!(d.meds && d.meds.length),
+      weight: !!(d.weights && d.weights.length)
+    };
+  }
+}
+
+async function refreshFromServer(){
+  await loadAppData();
+  syncDotCacheFromAppData();
+  render();
+  renderReminderCard();
+}
+
 (async function init(){
   renderAriAge();
   await loadAppData();
-  dateIndex = new Set(Object.keys(APP_DATA.days));
-  for(const dStr of dateIndex){
-    const data = APP_DATA.days[dStr];
-    dotCache[dStr] = {
-      meal: !!(data.meals&&data.meals.length),
-      poop: !!(data.poops&&data.poops.length),
-      activity: !!(data.activities&&data.activities.length),
-      care: !!(data.care&&data.care.length),
-      med: !!(data.meds&&data.meds.length),
-      weight: !!(data.weights&&data.weights.length)
-    };
-  }
+  syncDotCacheFromAppData();
   render();
   renderReminderCard();
 
@@ -1612,6 +1644,11 @@ function runAsk(){
       document.getElementById('askInput').value = chip.textContent;
       runAsk();
     };
+  });
+
+  // 탭을 오래 안 보다가 다시 보면 최신 데이터로 새로고침 (오래된 화면에서의 저장으로 인한 덮어쓰기 방지)
+  document.addEventListener('visibilitychange', ()=>{
+    if(document.visibilityState === 'visible') refreshFromServer();
   });
 })();
 </script>
